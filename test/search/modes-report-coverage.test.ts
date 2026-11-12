@@ -6,7 +6,7 @@
  * invisible on the dashboard while they steered every real search. The knob
  * list now derives from KNOB_DESCRIPTIONS (a Record over every ModeBundle
  * key — the type system forces a description, and therefore a dashboard row,
- * for each new knob). Drift guard: resolved keys == bundle keys, forever.
+ * for each new knob). Drift guard: resolved keys cover all bundle keys plus opt-in knobs outside bundles.
  *
  * Also pins the #4604 honesty note: the report labels itself as brain-level
  * resolution only (per-call SearchOpts overrides are not represented).
@@ -24,10 +24,10 @@ const stubEngine = (configRows: Record<string, string> = {}) =>
   }) as unknown as BrainEngine;
 
 describe('#4604 buildModesReport — full-bundle knob coverage', () => {
-  test('resolved covers EVERY ModeBundle key (drift guard)', async () => {
+  test('resolved covers EVERY ModeBundle key plus opt-in blend (drift guard)', async () => {
     const report = await buildModesReport(stubEngine());
     const bundleKeys = Object.keys(MODE_BUNDLES.balanced).sort();
-    expect(Object.keys(report.resolved).sort()).toEqual(bundleKeys);
+    expect(Object.keys(report.resolved).sort()).toEqual([...bundleKeys, 'reranker_blend_alpha'].sort());
     // And every row carries value/source/description.
     for (const [k, row] of Object.entries(report.resolved)) {
       expect(typeof row.source).toBe('string');

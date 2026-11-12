@@ -1052,6 +1052,8 @@ export interface SearchResult {
    *  (RRF + boosts). v0.42.3.0 autocut cuts on this — the trustworthy
    *  separatrix — never on RRF/cosine. */
   rerank_score?: number;
+  /** Normalized first-stage/relevance blend used only for reranked-head ordering. */
+  blend_score?: number;
   /** System One: `rubric` rerank scores (autocut/CRAG ignore them); the S3 evidence probability when the gate acted. */
   rerank_score_kind?: 'rubric'; decide_evidence?: { p: number; clears: boolean };
   /** System One S5 (on mode only): injection probability, and the flag that demoted it below clean same-class results. */
@@ -1154,7 +1156,7 @@ export interface SearchResult {
   image_page?: true;
   /** Multiplier the rank priors applied to this row's ordering score (search/rank-priors.ts); absent = 1. */
   rank_prior?: number;
-  /** The value a reranked list is ordered by: rerank_score times rank_prior (search/rank-priors.ts). */
+  /** Reranked ordering score (blend_score ?? rerank_score) times rank_prior (search/rank-priors.ts). */
   rank_score?: number;
   /** The fused score when the returned `score` was rewritten to follow rank order (search/score-contract.ts). */
   fused_score?: number;
@@ -1478,6 +1480,8 @@ export interface SearchOpts extends PageReadPolicy {
     topNOut: number | null;
     model?: string;
     timeoutMs?: number;
+    /** First-stage weight in the normalized reranker blend (0..1; unset = off). */
+    blendAlpha?: number | null;
     // Test seam — never set in production code.
     rerankerFn?: (input: { query: string; documents: string[]; topN?: number; model?: string; signal?: AbortSignal; timeoutMs?: number }) => Promise<{ index: number; relevanceScore: number }[]>;
   };

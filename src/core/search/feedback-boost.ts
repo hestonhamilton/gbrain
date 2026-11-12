@@ -4,7 +4,7 @@
  * never rated), so m stays within [1 − λ, 1 + λ] and a brain without ratings
  * ranks exactly as before.
  *
- * It runs on the score that actually orders the list: the reranker's score on
+ * It runs on the score that actually orders the list: blend_score ?? rerank_score on
  * the reranked head when the reranker ran (a boost before the cross-encoder
  * would be erased), the fused score otherwise. Raw `score` and `rerank_score`
  * are never modified, so autocut and evidence grading read the same values as
@@ -15,6 +15,7 @@ import type { BrainEngine } from '../engine.ts';
 import type { SearchResult } from '../types.ts';
 import { effectiveInfluence, loadFeedbackSettings } from '../feedback/settings.ts';
 import { NEUTRAL_WEIGHT } from '../feedback/store.ts';
+import { rerankOrderScore } from './rerank-order.ts';
 
 export interface FeedbackStageMeta {
   applied: boolean;
@@ -79,7 +80,7 @@ export async function applyFeedbackStage(
     const influence = effectiveInfluence(settings);
     if (influence <= 0) return results;
     const scoreOf = (r: SearchResult): number | undefined =>
-      opts.reranked ? r.rerank_score : r.score;
+      opts.reranked ? rerankOrderScore(r) : r.score;
     let boosted = 0;
     const keyed = results.map((r, index) => {
       const base = scoreOf(r);

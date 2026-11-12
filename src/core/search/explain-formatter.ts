@@ -110,7 +110,8 @@ export function formatResultExplain(
   // result sits at or above the cut threshold.
   if (result.rerank_score !== undefined) {
     anyBoost = true;
-    lines.push(`   • rerank score=${fmt(result.rerank_score)}`);
+    const blend = result.blend_score === undefined ? '' : ` blend score=${fmt(result.blend_score)}`;
+    lines.push(`   • rerank score=${fmt(result.rerank_score)}${blend}`);
   }
 
   if (!anyBoost) {

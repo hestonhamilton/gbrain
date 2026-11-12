@@ -224,6 +224,17 @@ stored semantic results while caching is disabled. `gbrain search modes`
 reports effective `cache_enabled: false`, and `cache stats` reports
 `enabled: false`, even when retained configuration enables the cache.
 
+`search.reranker.blend_alpha` is opt-in and outside the mode bundles. Set it
+with `gbrain config set search.reranker.blend_alpha 0.5` to order the scored
+head by `alpha * minmax(score) + (1 - alpha) * minmax(relevanceScore)`.
+Each term normalizes over only provider-scored head rows; a constant term is
+zero. Alpha 0 uses relevance order; alpha 1 uses first-stage order. Equal
+values preserve input order. Unset, `off` and invalid values disable blending;
+rubric reranker batches also bypass it. Results retain raw `rerank_score` for
+autocut and CRAG and carry the ordering value as `blend_score`. Rank priors,
+feedback and returned scores use the blended ordering signal. `search modes`
+reports the resolved alpha; no mode enables it automatically.
+
 ### Cost intuition
 
 The table estimates only the tokens your *downstream agent* pays to read

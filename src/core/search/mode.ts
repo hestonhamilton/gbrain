@@ -723,6 +723,7 @@ export interface SearchKeyOverrides {
   // number | undefined.
   reranker_top_n_out?: number | null;
   reranker_timeout_ms?: number;
+  reranker_blend_alpha?: number | null;
   // v0.35.6.0 — floor-ratio gate override.
   floor_ratio?: number;
   // T2 — title-phrase boost override.
@@ -790,6 +791,7 @@ export interface SearchPerCallOpts {
   reranker_top_n_in?: number;
   reranker_top_n_out?: number | null;
   reranker_timeout_ms?: number;
+  reranker_blend_alpha?: number | null;
   // v0.35.6.0 — floor-ratio per-call override.
   floor_ratio?: number;
   // T2 — title-phrase boost per-call override.
@@ -865,7 +867,13 @@ export interface ResolveSearchModeInput {
   decide?: Record<string, string>;
 }
 
-export interface ResolvedSearchKnobs extends ModeBundle {
+/** Search knobs outside the mode bundles remain opt-in in every mode. */
+export interface SearchKnobs extends ModeBundle {
+  /** First-stage weight in the reranker blend (0..1; null/unset = off). */
+  reranker_blend_alpha?: number | null;
+}
+
+export interface ResolvedSearchKnobs extends SearchKnobs {
   /** Which mode bundle supplied the defaults (after fallback). */
   resolved_mode: SearchMode;
   /** True if the caller's `mode` input was a recognized SearchMode. */
@@ -911,6 +919,7 @@ export function resolveSearchMode(input: ResolveSearchModeInput): ResolvedSearch
     reranker_top_n_in: pick('reranker_top_n_in'),
     reranker_top_n_out: pick('reranker_top_n_out'),
     reranker_timeout_ms: pickRerankerTimeoutMs(),
+    reranker_blend_alpha: pc.reranker_blend_alpha !== undefined ? pc.reranker_blend_alpha : ov.reranker_blend_alpha ?? null,
     // v0.35.6.0 — floor-ratio resolved via the same pick chain.
     floor_ratio: pick('floor_ratio'),
     title_boost: pick('title_boost'),
@@ -961,14 +970,14 @@ export function resolveSearchMode(input: ResolveSearchModeInput): ResolvedSearch
 export type KnobSource = 'per-call' | 'override' | 'mode' | 'fallback';
 
 export interface ResolvedKnobAttribution {
-  knob: keyof ModeBundle;
-  value: ModeBundle[keyof ModeBundle];
+  knob: keyof SearchKnobs;
+  value: SearchKnobs[keyof SearchKnobs];
   source: KnobSource;
   // For 'override' source, the config key path; for 'mode' source, the mode name.
   source_detail: string;
 }
 
-export function attributeKnob<K extends keyof ModeBundle>(
+export function attributeKnob<K extends keyof SearchKnobs>(
   knob: K,
   input: ResolveSearchModeInput,
   resolved: ResolvedSearchKnobs,
@@ -980,6 +989,9 @@ export function attributeKnob<K extends keyof ModeBundle>(
   }
   if (ov[knob] !== undefined) {
     return { knob, value: resolved[knob], source: 'override', source_detail: `config: ${KNOB_CONFIG_KEY[knob]}` };
+  }
+  if (knob === 'reranker_blend_alpha') {
+    return { knob, value: resolved[knob], source: 'fallback', source_detail: 'default: off' };
   }
   if (resolved.mode_valid) {
     return { knob, value: resolved[knob], source: 'mode', source_detail: `mode: ${resolved.resolved_mode}` };
@@ -1307,6 +1319,8 @@ export function knobsHash(
     ...(knobs.collapse === false ? ['col=0'] : []),
     ...(knobs.rank_priors === false ? ['rpr=0'] : []),
     ...(knobs.keyword_phrase === true ? ['kph=1'] : []),
+    // Opt-in blend: keep every blend-off hash unchanged.
+    ...(knobs.reranker_blend_alpha != null ? [`rrba=${knobs.reranker_blend_alpha}`] : []),
   ];
   // #5691 (append-only, no version bump): only a non-empty query prefix adds
   // a part, so every row written without one keeps its key.
@@ -1422,6 +1436,11 @@ export function loadOverridesFromConfig(
   if (rt !== undefined) {
     const n = parseInt(rt, 10);
     if (Number.isFinite(n) && n > 0) out.reranker_timeout_ms = n;
+  }
+  const ra = get('search.reranker.blend_alpha');
+  if (ra !== undefined) {
+    const n = ra.trim() === '' ? NaN : Number(ra);
+    out.reranker_blend_alpha = Number.isFinite(n) && n >= 0 && n <= 1 ? n : null;
   }
 
   // v0.35.6.0 — floor-ratio config key. Accepts a number in [0, 1]; values
@@ -1593,13 +1612,13 @@ export function loadOverridesFromConfig(
 
 /**
  * knob → the config key `loadOverridesFromConfig` reads it from (#4605). The
- * Record type forces a row per ModeBundle knob. `attributeKnob` prints these
+ * Record type forces a row per SearchKnobs key, including opt-in knobs. `attributeKnob` prints these
  * (the dashboard's copy-pasteable `config set` target — knob name and key
  * spelling differ for 14 of them); SEARCH_MODE_CONFIG_KEYS derives from it;
  * KNOWN_CONFIG_KEYS (config.ts, kept import-light) mirrors it by hand, pinned
  * equal by test/config-search-registry.test.ts.
  */
-export const KNOB_CONFIG_KEY: Readonly<Record<keyof ModeBundle, string>> = Object.freeze({
+export const KNOB_CONFIG_KEY: Readonly<Record<keyof SearchKnobs, string>> = Object.freeze({
   cache_enabled: 'search.cache.enabled',
   cache_similarity_threshold: 'search.cache.similarity_threshold',
   cache_ttl_seconds: 'search.cache.ttl_seconds',
@@ -1614,6 +1633,7 @@ export const KNOB_CONFIG_KEY: Readonly<Record<keyof ModeBundle, string>> = Objec
   reranker_top_n_in: 'search.reranker.top_n_in',
   reranker_top_n_out: 'search.reranker.top_n_out',
   reranker_timeout_ms: 'search.reranker.timeout_ms',
+  reranker_blend_alpha: 'search.reranker.blend_alpha',
   floor_ratio: 'search.floor_ratio',
   title_boost: 'search.title_boost',
   evidence_cosine_floor: 'search.evidence_cosine_floor',

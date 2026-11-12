@@ -20,6 +20,8 @@ export interface RerankerOpts {
   model?: string;
   /** Per-call timeout in ms (default 5000 — propagates to gateway.rerank). */
   timeoutMs?: number;
+  /** First-stage weight in the normalized score blend (0..1; unset = off). */
+  blendAlpha?: number | null;
   /**
    * #4648: fired when the provider answered SUCCESSFULLY but with an
    * empty/malformed result set for a non-empty document batch, so the
@@ -114,7 +116,7 @@ export function capRerankDoc(text: string): string {
 }
 
 /**
- * Reorder the top `topNIn` results by reranker relevance score. The
+ * Reorder the top `topNIn` results by relevance, or an opt-in normalized blend. The
  * un-reranked tail (any rows past topNIn) preserves its original RRF
  * position — appended after the reordered head in the same order it had
  * coming in.
@@ -257,6 +259,23 @@ export async function applyReranker(
       item.reranker_delta = r.index - reorderedHead.length;
       reorderedHead.push(item);
     }
+  }
+  const alpha = opts.blendAlpha;
+  if (typeof alpha === 'number' && Number.isFinite(alpha) && alpha >= 0 && alpha <= 1 &&
+      rerankMeta?.score_semantics !== 'rubric' && !reorderedHead.some(r => r.rerank_score_kind === 'rubric') &&
+      reorderedHead.length > 0 && reorderedHead.every(r => Number.isFinite(r.score) && Number.isFinite(r.rerank_score))) {
+    const firstMin = Math.min(...reorderedHead.map(r => r.score));
+    const firstMax = Math.max(...reorderedHead.map(r => r.score));
+    const rerankMin = Math.min(...reorderedHead.map(r => r.rerank_score!));
+    const rerankMax = Math.max(...reorderedHead.map(r => r.rerank_score!));
+    const indices = new Map(head.map((r, i) => [r, i]));
+    for (const r of reorderedHead) {
+      const first = firstMax === firstMin ? 0 : (r.score - firstMin) / (firstMax - firstMin);
+      const relevance = rerankMax === rerankMin ? 0 : (r.rerank_score! - rerankMin) / (rerankMax - rerankMin);
+      r.blend_score = alpha * first + (1 - alpha) * relevance;
+    }
+    reorderedHead.sort((a, b) => (b.blend_score! - a.blend_score!) || (indices.get(a)! - indices.get(b)!));
+    reorderedHead.forEach((r, i) => { r.reranker_delta = indices.get(r)! - i; });
   }
   // If the reranker dropped some head items (rare; usually only happens
   // with explicit top_n), preserve their original positions at the end

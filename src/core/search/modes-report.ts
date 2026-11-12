@@ -15,11 +15,12 @@ import {
   attributeKnob,
   type SearchMode,
   type ModeBundle,
+  type SearchKnobs,
 } from './mode.ts';
 import { describeRerankerFix } from '../ai/reranker-readiness.ts';
 import { rerankerReadinessForEngine } from '../ai/reranker-readiness-engine.ts';
 
-export const KNOB_DESCRIPTIONS: Record<keyof ModeBundle, string> = {
+export const KNOB_DESCRIPTIONS: Record<keyof SearchKnobs, string> = {
   cache_enabled: 'Semantic query cache on/off',
   cache_similarity_threshold: 'Cosine-similarity floor for cache hits (0..1)',
   cache_ttl_seconds: 'Per-row cache TTL',
@@ -34,6 +35,7 @@ export const KNOB_DESCRIPTIONS: Record<keyof ModeBundle, string> = {
   reranker_top_n_in: 'Candidates sent to reranker per call',
   reranker_top_n_out: 'Cap on reranked output (null = no truncate)',
   reranker_timeout_ms: 'HTTP timeout for the reranker call',
+  reranker_blend_alpha: 'First-stage weight in normalized reranker blend (0..1, null = off)',
   floor_ratio: 'Floor-ratio gate for metadata boosts (0..1, undefined = off)',
   title_boost: 'Title-phrase boost multiplier (query is a title token-run; 1.0 = off)',
   // v0.46.15 retrieval wave knobs
@@ -83,7 +85,8 @@ export const KNOB_DESCRIPTIONS: Record<keyof ModeBundle, string> = {
  * indistinguishable from an unset knob. Null now renders distinctly; plain
  * `(undefined)` stays reserved for knobs that are genuinely unset.
  */
-export const KNOB_NULL_LABELS: Partial<Record<keyof ModeBundle, string>> = {
+export const KNOB_NULL_LABELS: Partial<Record<keyof SearchKnobs, string>> = {
+  reranker_blend_alpha: 'off (null)',
   expansion_variant_budget: 'legacy (null)',
   reranker_top_n_out: 'no truncate (null)',
   keyword_arm_confidence_floor: 'off (null)',
@@ -92,7 +95,7 @@ export const KNOB_NULL_LABELS: Partial<Record<keyof ModeBundle, string>> = {
 /** Render one resolved knob value for the human `gbrain search modes` table. */
 export function formatKnobValue(knob: string, value: unknown): string {
   if (value === undefined) return '(undefined)';
-  if (value === null) return KNOB_NULL_LABELS[knob as keyof ModeBundle] ?? '(null)';
+  if (value === null) return KNOB_NULL_LABELS[knob as keyof SearchKnobs] ?? '(null)';
   return String(value);
 }
 
@@ -121,7 +124,7 @@ export interface SearchModesReport {
   schema_version: 2;
   active_mode: SearchMode;
   active_mode_valid: boolean;
-  resolved: Record<keyof ModeBundle, { value: unknown; source: string; source_detail: string; description: string }>;
+  resolved: Record<keyof SearchKnobs, { value: unknown; source: string; source_detail: string; description: string }>;
   bundles: Record<SearchMode, ModeBundle>;
   config_keys: ReadonlyArray<string>;
   /**
@@ -171,12 +174,12 @@ export async function buildModesReport(engine: BrainEngine): Promise<SearchModes
   const resolved = resolveSearchMode(input);
 
   // #4604: derive the knob list from KNOB_DESCRIPTIONS (a Record over
-  // EVERY ModeBundle key, so the type system forces a description — and
+  // EVERY SearchKnobs key, so the type system forces a description — and
   // therefore a dashboard row — for each new knob). The previous literal
   // array hardcoded 12 of the bundle's knobs, leaving live overrides like
   // search.reranker.* and search.relational_retrieval invisible here while
   // they steered every real search.
-  const knobs = Object.keys(KNOB_DESCRIPTIONS) as Array<keyof ModeBundle>;
+  const knobs = Object.keys(KNOB_DESCRIPTIONS) as Array<keyof SearchKnobs>;
 
   const attributions = {} as SearchModesReport['resolved'];
   for (const k of knobs) {

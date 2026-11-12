@@ -305,6 +305,7 @@ export async function rerankAndPin(
     topNOut: resolvedMode.reranker_top_n_out,
     model: resolvedMode.reranker_model,
     timeoutMs: resolvedMode.reranker_timeout_ms,
+    blendAlpha: resolvedMode.reranker_blend_alpha,
   };
   // Session-diverse pool (diverse-pool.ts): the reranker reads at least N rows.
   const rerankerOpts = resolvedMode.diverse_pool_depth > baseRerankerOpts.topNIn

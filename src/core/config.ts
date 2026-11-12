@@ -1343,6 +1343,7 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'search.reranker.top_n_in',
   'search.reranker.top_n_out',
   'search.reranker.timeout_ms',
+  'search.reranker.blend_alpha',
   // W3: confidence-gated reranking (mode.ts reads; `off` | `shadow`, and δ in [0, 1]).
   'search.reranker.gate',
   'search.reranker.gate_min_gap',
